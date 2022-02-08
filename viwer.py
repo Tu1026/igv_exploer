@@ -13,6 +13,7 @@ import os
 import threading
 import queue
 
+mutex = QtCore.QMutex()
 
 # class ProcessThread(threading.Thread):
 #     def __init__(self, in_queue, out_queue):
@@ -63,11 +64,13 @@ class WriteToFileThread(QThread):
         self.data = data
             
     def run(self):
+        mutex.lock()
         if self.action == "Blacklist":
-            csv.writer(self.file).writerow(self.data)
+            self.file.write("123\t123\t123")
+            # csv.writer(self.file).writerow(self.data)
             self.file.flush()
         print("I got here")
-
+        mutex.unlock()
 
 
 
@@ -81,7 +84,7 @@ class QImageViewer(QMainWindow):
         self.scaleFactor = 0.0
         
         self.inputQueue = queue.Queue()
-        self.
+
         
         self.imageLabel = QLabel()
         self.imageLabel.setBackgroundRole(QPalette.Base)
@@ -139,8 +142,8 @@ class QImageViewer(QMainWindow):
             self.counter += 1
             if key == QtCore.Qt.Key_Q:
                 print('Pressed Q')
-                writeImageThread = WriteToFileThread("Blacklist", self.blacklist, ["123", "123", "123"])
-                writeImageThread.start()
+                self.writeImageThread = WriteToFileThread("Blacklist", self.blacklist, ["123", "123", "123"])
+                self.writeImageThread.start()
                 self.openImage(os.path.join(self.folder, self.files[self.counter]))
             elif key == QtCore.Qt.Key_E:
                 print("Pressed E")
@@ -152,7 +155,7 @@ class QImageViewer(QMainWindow):
         if action == "Blacklist":
             # self.blacklist_writer.writerow(["123", "123", "123"])
             self.blacklist.write("123123")
-            self.blacklist.flush()
+            # self.blacklist.flush()
         # elif action == "Checklist":
             
         # elif action == "Move Back"
@@ -176,12 +179,13 @@ class QImageViewer(QMainWindow):
                 
     def select_folder(self):
         self.folder = QFileDialog.getExistingDirectory(self, 'Select folder of screenshots', options=QFileDialog.ShowDirsOnly)
-        self.keyPressed.connect(self.on_key)
-        self.files = [img for img in os.listdir(self.folder) if img.endswith((".png", ".jpeg", "jpg"))]
-        print(os.path.join(self.folder, self.files[0]))
-        self.openImage(os.path.join(self.folder, self.files[0]))
-        self.setWindowTitle(f"IGV Image Viewer - {self.folder}")
-        
+        if self.folder:
+            self.keyPressed.connect(self.on_key)
+            self.files = [img for img in os.listdir(self.folder) if img.endswith((".png", ".jpeg", "jpg"))]
+            print(os.path.join(self.folder, self.files[0]))
+            self.openImage(os.path.join(self.folder, self.files[0]))
+            self.setWindowTitle(f"IGV Image Viewer - {self.folder}")
+            
     def select_tsv(self):
         options = QFileDialog.Options()
         self.tsv_path = QFileDialog.getOpenFileName(self, 'Select betastasis TSV', '',
