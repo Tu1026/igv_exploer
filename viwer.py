@@ -1,20 +1,19 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-from fileinput import filename
+
+import pandas as pd
 from PyQt5.QtCore import QThread, Qt, pyqtSignal, pyqtSlot
 from PyQt5 import QtCore
 from PyQt5.QtGui import QImage, QPixmap, QPalette, QPainter
 from PyQt5.QtPrintSupport import QPrintDialog, QPrinter
 from PyQt5.QtWidgets import QLabel, QSizePolicy, QScrollArea, QMessageBox, QMainWindow, QMenu, QAction, \
     qApp, QFileDialog
-import csv
 import os 
-import threading
-import queue
+
 
 mutex = QtCore.QMutex()
-
+betastasis_df = None
 # class ProcessThread(threading.Thread):
 #     def __init__(self, in_queue, out_queue):
 #         threading.Thread.__init__(self)
@@ -57,34 +56,74 @@ class ImageThread(QThread):
 
 class WriteToFileThread(QThread):
     
-    def __init__(self, action, file, data, parent=None):
+    def __init__(self, action, file, curateFile, dataName, parent=None):
         QThread.__init__(self, parent)
         self.action = action
         self.file = file
-        self.data = data
+        self.curateFile = curateFile
+        self.dataName = dataName
+        self.chrom, self.pos, self.gene, self.patient, _ = self.dataName.split(".")
+
+    
+    
+    def run(self):
+        mutex.lock()
+        global betastasis_df
+        row = betastasis_df[(betastasis_df["CHROM"] == "chr" + str(self.chrom)) & (
+            int(betastasis_df["POSITION"])==(self.pos))&
+            (betastasis_df["GENE"]==self.gene)]
+        ref = row["REF"][0]
+        alt = row["ALT"][0]
+        if self.action == "Blacklisted":
+            self.file.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\n")
+        self.curateFile.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\t{self.gene}\t{self.action}\n")
+        self.file.flush()
+        self.curateFile.flush()
+        mutex.unlock()
+
+class DeleteLineThread(QThread):
+    
+    def __init__(self, curateFile,  parent=None):
+        QThread.__init__(self, parent)
+        self.curateFile = curateFile
+    
+    def delete_last_line(self,file):
+
+    # Move the pointer (similar to a cursor in a text editor) to the end of the file
+        file.seek(0, os.SEEK_END)
+
+        # This code means the following code skips the very last character in the file -
+        # i.e. in the case the last line is null we delete the last line
+        # and the penultimate one
+        pos = file.tell() - 1
+
+        # Read each character in the file one at a time from the penultimate
+        # character going backwards, searching for a newline character
+        # If we find a new line, exit the search
+        while pos > 0 and file.read(1) != "\n":
+            pos -= 1
+            file.seek(pos, os.SEEK_SET)
+
+        # So long as we're not at the start of the file, delete all the characters ahead
+        # of this position
+        if pos > 0:
+            file.seek(pos, os.SEEK_SET)
+            file.truncate()
+        file.write("\n")
             
     def run(self):
         mutex.lock()
-        if self.action == "Blacklist":
-            self.file.write("123\t123\t123")
-            # csv.writer(self.file).writerow(self.data)
-            self.file.flush()
-        print("I got here")
+        
         mutex.unlock()
-
-
 
 class QImageViewer(QMainWindow):
     keyPressed = pyqtSignal(int)
     fileAction = pyqtSignal(str)
-    def __init__(self, blacklist, checklist):
+    def __init__(self, blacklist, checklist, curatelist):
         super().__init__()
         self.counter = 0
         self.printer = QPrinter()
         self.scaleFactor = 0.0
-        
-        self.inputQueue = queue.Queue()
-
         
         self.imageLabel = QLabel()
         self.imageLabel.setBackgroundRole(QPalette.Base)
@@ -95,45 +134,30 @@ class QImageViewer(QMainWindow):
         self.scrollArea.setBackgroundRole(QPalette.Dark)
         self.scrollArea.setWidget(self.imageLabel)
         self.scrollArea.setVisible(False)
-
+        
+        
         self.setCentralWidget(self.scrollArea)
         self.createActions()
         self.createMenus()
         self.blacklist = blacklist
         # self.blacklist_writer = csv.writer(self.blacklist, delimiter="\t")
         self.checklist = checklist
+        self.curatelist = curatelist
+        
         self.setWindowTitle("IGV Image Viewer - no folder selected yet")
         # self.resize(800, 600)
         self.showMaximized()
         
 
-    # def open(self):
-    #     options = QFileDialog.Options()
-    #     # fileName = QFileDialog.getOpenFileName(self, "Open File", QDir.currentPath())
-    #     fileName, _ = QFileDialog.getOpenFileName(self, 'QFileDialog.getOpenFileName()', '',
-    #                                               'Images (*.png *.jpeg *.jpg *.bmp *.gif)', options=options)
-    #     if fileName:
-    #         image = QImage(fileName)
-    #         if image.isNull():
-    #             QMessageBox.information(self, "Image Viewer", "Cannot load %s." % fileName)
-    #             return
-
-    #         self.imageLabel.setPixmap(QPixmap.fromImage(image))
-    #         self.scaleFactor = 1.0
-
-    #         self.scrollArea.setVisible(True)
-    #         self.printAct.setEnabled(True)
-    #         self.fitToWindowAct.setEnabled(True)
-    #         self.updateActions()
-
-    #         if not self.fitToWindowAct.isChecked():
-    #             self.imageLabel.adjustSize()
-    
     def keyPressEvent(self, event):
         super(QImageViewer, self).keyPressEvent(event)
         self.keyPressed.emit(event.key()) 
         
     def on_key(self, key):
+        global betastasis_df
+        if not betastasis_df:
+            self.pop_up_alert().exec_()
+            return
         # test for a specific key
         if key == QtCore.Qt.Key_B:
             self.counter -= 1
@@ -141,16 +165,34 @@ class QImageViewer(QMainWindow):
         else:
             self.counter += 1
             if key == QtCore.Qt.Key_Q:
+                action = "Blacklisted"
+                file = self.blacklist
                 print('Pressed Q')
-                self.writeImageThread = WriteToFileThread("Blacklist", self.blacklist, ["123", "123", "123"])
-                self.writeImageThread.start()
                 self.openImage(os.path.join(self.folder, self.files[self.counter]))
             elif key == QtCore.Qt.Key_E:
+                action = "Curated"
+                file = self.curatelist
                 print("Pressed E")
                 self.openImage(os.path.join(self.folder, self.files[self.counter]))
             elif key == QtCore.Qt.Key_W:
                 print("Pressed W")
-            
+                action = "Double-Checked"
+                file = self.checklist   
+            self.writeImageThread = WriteToFileThread(action, file, 
+                                                    self.curatelist, self.files[self.counter])
+            self.writeImageThread.start()
+    
+    def pop_up_alert(self):
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Critical)
+        msg.setText("You need to select the exported full TSV before you can start")
+        msg.setInformativeText("Download the TSV from betastasis (include the silent and blacklisted) and select the tsv from file option")
+        msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        return msg
+    
+
+    
+    
     def fileAction(self, action):
         if action == "Blacklist":
             # self.blacklist_writer.writerow(["123", "123", "123"])
@@ -187,9 +229,12 @@ class QImageViewer(QMainWindow):
             self.setWindowTitle(f"IGV Image Viewer - {self.folder}")
             
     def select_tsv(self):
+        global betastasis_df
         options = QFileDialog.Options()
         self.tsv_path = QFileDialog.getOpenFileName(self, 'Select betastasis TSV', '',
                                   'TSV (*.tsv)', options=options)
+        
+        betastasis_df = pd.read_csv(self.tsv_path, sep="\t", index_col=False)
 
     def zoomIn(self):
         self.scaleImage(1.25)
@@ -291,12 +336,15 @@ class QImageViewer(QMainWindow):
 if __name__ == '__main__':
     import sys
     from PyQt5.QtWidgets import QApplication
-    with open("Blacklist.tsv", "w+") as blacklist, open("DoubleChecklist.tsv", "w+") as checklist: 
+    with open("BlackList.tsv", "a+") as blacklist, open("DoubleCheckList.tsv", "a+") as checklist, open("CuratedList.tsv", "w+") as curatelist: 
         pass
     
-    with open("Blacklist.tsv", "r+") as blacklist, open("DoubleChecklist.tsv", "r+") as checklist: 
+    with open("BlackList.tsv", "r+") as blacklist, open("DoubleCheckList.tsv", "r+") as checklist, open("CuratedList.tsv", "w+") as curatelist:
+        blacklist.seek(0, os.SEEK_END)
+        checklist.seek(0, os.SEEK_END)
+        curatelist.seek(0, os.SEEK_END)
         app = QApplication(sys.argv)
-        imageViewer = QImageViewer(blacklist, checklist)
+        imageViewer = QImageViewer(blacklist, checklist, curatelist)
         imageViewer.show()
         sys.exit(app.exec_())
     # TODO QScrollArea support mouse
@@ -304,3 +352,5 @@ if __name__ == '__main__':
     #
     # if you need Two Image Synchronous Scrolling in the window by PyQt5 and Python 3
     # please visit https://gist.github.com/acbetter/e7d0c600fdc0865f4b0ee05a17b858f2
+    
+    
