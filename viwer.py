@@ -1,7 +1,5 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-
-
 import pandas as pd
 from PyQt5.QtCore import QThread, Qt, pyqtSignal, pyqtSlot
 from PyQt5 import QtCore
@@ -10,10 +8,19 @@ from PyQt5.QtPrintSupport import QPrintDialog, QPrinter
 from PyQt5.QtWidgets import QLabel, QSizePolicy, QScrollArea, QMessageBox, QMainWindow, QMenu, QAction, \
     qApp, QFileDialog
 import os 
+from pathlib import Path
+import platform
 
+if platform.system():
+    try:
+        from ctypes import windll  # Only exists on Windows.
+        myappid = 'mycompany.myproduct.subproduct.version'
+        windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except ImportError:
+        pass
+working_dir = Path(__file__).parent
 
 mutex = QtCore.QMutex()
-betastasis_df = None
 # class ProcessThread(threading.Thread):
 #     def __init__(self, in_queue, out_queue):
 #         threading.Thread.__init__(self)
@@ -57,18 +64,16 @@ class ImageThread(QThread):
 class WriteToFileThread(QThread):
     errorMessage = pyqtSignal(str, str)
     
-    def __init__(self, action, file, curateFile, dataName, parent=None):
+    def __init__(self, action, dataName, parent=None):
         QThread.__init__(self, parent)
         self.action = action
-        self.file = file
-        self.curateFile = curateFile
         self.dataName = dataName
         self.chrom, self.pos, self.gene, self.patient, _ = self.dataName.split(".")
 
     
     def run(self):
         mutex.lock()
-        global betastasis_df
+        betastasis_df = contextPerserver.betastasis_df
         row = betastasis_df[(betastasis_df["CHROM"] == "chr" + str(self.chrom)) & (
             (betastasis_df["POSITION"])==int(self.pos))&
             (betastasis_df["GENE"]==self.gene)]
@@ -78,26 +83,32 @@ class WriteToFileThread(QThread):
         print(f"This is Gene {self.gene}")
         if not len(row):
             self.errorMessage.emit("Could not find related entry for the screenshot in the betastasis TSV",
-                                   "You might want to double check the betastasis TSV you downloaded, maybe you forgot to show silent and blacklisted genes? "
-                                   "This gene will be skipped for record keeping now")
-        ref = row["REF"].iloc[0]
-        alt = row["ALT"].iloc[0]
+                                "You might want to double check the betastasis TSV you downloaded, maybe you forgot to show silent and blacklisted genes? "
+                                "This gene will be skipped for record keeping now")
+        try:
+            ref = row["REF"].iloc[0]
+            alt = row["ALT"].iloc[0]
+        except:
+            self.errorMessage.emit("Could not find related entry for the screenshot in the betastasis TSV",
+                                "You might want to double check the betastasis TSV you downloaded, maybe you forgot to show silent and blacklisted genes? "
+                                "This gene will be skipped for record keeping now")
         if self.action == "Blacklisted":
-            self.file.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\n")
+            with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "a") as file:
+                file.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\n")
+                file.flush()
         elif self.action == "Needs Double Check":
-            self.file.write(f"{self.dataName} needs double checking \n")
-        self.curateFile.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\t{self.gene}\t{self.action}\n")
-        self.file.flush()
-        self.curateFile.flush()
+            with open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "a") as file:
+                file.write(f"{self.dataName} needs double checking \n")
+                file.flush()
+        with open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a") as file:
+            self.curateFile.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\t{self.gene}\t{self.action}\n")
+            self.curateFile.flush()
         mutex.unlock()
 
 class DeleteLineThread(QThread):
     
-    def __init__(self, curateFile, blackList, checkList, parent=None):
+    def __init__(self, parent=None):
         QThread.__init__(self, parent)
-        self.curateFile = curateFile
-        self.blackList = blackList
-        self.checkList = checkList
     
     def delete_last_line(self,file):
 
@@ -148,27 +159,33 @@ class DeleteLineThread(QThread):
         
     def run(self):
         mutex.lock()
-        curate_line = self.peek_line(self.curateFile)
-        print("This is curate_line", curate_line)
-        action = curate_line.split("\t")[-1]
-        print("This is action", action)
-        if "Blacklisted" in action:
-            print(action, "should be blacklist")
-            self.delete_last_line(self.blackList)
-            print("Delete from blacklist")
-            self.blackList.flush()
-        elif "Needs Double Check" in action:
-            print(action, "should be needs double chec ")
-            self.delete_last_line(self.checkList)
-            self.checkList.flush()
-        self.delete_last_line(self.curateFile)
-        self.curateFile.flush()
+        with open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "r+") as curateFile:
+            curateFile.seek(0, os.SEEK_END)
+            curate_line = self.peek_line(curateFile)
+            print("This is curate_line", curate_line)
+            action = curate_line.split("\t")[-1]
+            print("This is action", action)
+            if "Blacklisted" in action:
+                with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "r+") as blackList:
+                    blackList.seek(0, os.SEEK_END)
+                    print(action, "should be blacklist")
+                    self.delete_last_line(blackList)
+                    print("Delete from blacklist")
+                    blackList.flush()
+            elif "Needs Double Check" in action:
+                with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "r+") as checkList:
+                    checkList.seek(0, os.SEEK_END)
+                    print(action, "should be needs double chec ")
+                    self.delete_last_line(checkList)
+                    checkList.flush()
+            self.delete_last_line(curateFile)
+            curateFile.flush()
         mutex.unlock()
 
 class QImageViewer(QMainWindow):
     keyPressed = pyqtSignal(int)
     fileAction = pyqtSignal(str)
-    def __init__(self, blacklist, checklist, curatelist):
+    def __init__(self):
         super().__init__()
         self.counter = 0
         self.scaleFactor = 0.0
@@ -187,10 +204,6 @@ class QImageViewer(QMainWindow):
         self.setCentralWidget(self.scrollArea)
         self.createActions()
         self.createMenus()
-        self.blacklist = blacklist
-        # self.blacklist_writer = csv.writer(self.blacklist, delimiter="\t")
-        self.checklist = checklist
-        self.curatelist = curatelist
         
         self.setWindowTitle("IGV Image Viewer - no folder selected yet")
         # self.resize(800, 600)
@@ -202,7 +215,7 @@ class QImageViewer(QMainWindow):
         self.keyPressed.emit(event.key()) 
         
     def on_key(self, key):
-        global betastasis_df
+        betastasis_df = contextPerserver.betastasis_df
         if betastasis_df is None:
             self.pop_up_alert("You need to select the exported full TSV before you can start", 
                               "Download the TSV from betastasis (include the silent and blacklisted) and select the tsv from file option").exec_()
@@ -213,7 +226,7 @@ class QImageViewer(QMainWindow):
                 return
             self.counter -= 1
             # self.openImage(os.path.join(self.folder, self.files[self.counter]))
-            self.deleteLineThread = DeleteLineThread(self.curatelist, self.blacklist, self.checklist)
+            self.deleteLineThread = DeleteLineThread()
             self.deleteLineThread.start()
         elif key == QtCore.Qt.Key_Q or key == QtCore.Qt.Key_E or key == QtCore.Qt.Key_W:
             self.counter += 1
@@ -224,16 +237,13 @@ class QImageViewer(QMainWindow):
                 # self.openImage(os.path.join(self.folder, self.files[self.counter]))
             elif key == QtCore.Qt.Key_E:
                 action = "Curated"
-                file = self.curatelist
                 print("Pressed E")
                 # self.openImage(os.path.join(self.folder, self.files[self.counter]))
             elif key == QtCore.Qt.Key_W:
                 print("Pressed W")
                 action = "Needs Double Check"
-                file = self.checklist   
             
-            self.writeImageThread = WriteToFileThread(action, file, 
-                                                    self.curatelist, self.files[self.counter])
+            self.writeImageThread = WriteToFileThread(action,self.files[self.counter])
             self.writeImageThread.errorMessage.connect(self.pop_up_alert)
             self.writeImageThread.start()
         self.openImage(os.path.join(self.folder, self.files[self.counter]))
@@ -268,24 +278,26 @@ class QImageViewer(QMainWindow):
     def select_folder(self):
         self.folder = QFileDialog.getExistingDirectory(self, 'Select folder of screenshots', options=QFileDialog.ShowDirsOnly)
         if self.folder:
+            global working_dir
             self.keyPressed.connect(self.on_key)
             self.files = [img for img in os.listdir(self.folder) if img.endswith((".png", ".jpeg", "jpg"))]
             print(os.path.join(self.folder, self.files[0]))
             self.openImage(os.path.join(self.folder, self.files[0]))
             self.setWindowTitle(f"IGV Image Viewer - {self.folder}")
-            folder_name = self.folder.split("/")[-1]
-            self.results_folder = "results_"+folder_name
-            with open(os.path.join(self.results_folder, "BlackList.tsv"), "a+") as blacklist, open(os.path.join(self.results_folder,"DoubleCheckList.tsv"), "a+") as checklist, open(os.path.join(self.results_folder,"CuratedList.tsv"), "a+") as curatelist: 
+            folder_name = os.path.basename(self.folder)
+            results_folder = os.path.join(working_dir, "results_"+folder_name)
+            Path(results_folder).mkdir(parents=True, exist_ok=True)
+            contextPerserver.results_folder = results_folder
+            with open(os.path.join(results_folder, contextPerserver.black_list_name), "a+") as blacklist, open(os.path.join(results_folder, contextPerserver.checklist_name), "a+") as checklist, open(os.path.join(results_folder, contextPerserver.curatelist_name), "a+") as curatelist: 
                 pass
             
     def select_tsv(self):
-        global betastasis_df
         options = QFileDialog.Options()
         self.tsv_path = QFileDialog.getOpenFileName(self, 'Select betastasis TSV', '',
                                 'TSV (*.tsv)', options=options)
         print(self.tsv_path)
         if self.tsv_path[0]:
-            betastasis_df = pd.read_csv(self.tsv_path[0], sep="\t", index_col=False)
+            contextPerserver.betastasis_df = pd.read_csv(self.tsv_path[0], sep="\t", index_col=False)
 
     def zoomIn(self):
         self.scaleImage(1.25)
@@ -383,20 +395,23 @@ class QImageViewer(QMainWindow):
         scrollBar.setValue(int(factor * scrollBar.value()
                                + ((factor - 1) * scrollBar.pageStep() / 2)))
 
+class contextPerserver():
+    resultDir = None
+    betastasis_df = None
+    black_list_name = "BlackList.tsv"
+    checklist_name = "DoubleCheckList.tsv"
+    curatelist_name = "CuratedList.tsv"
+    results_folder = None
 
 if __name__ == '__main__':
     import sys
     from PyQt5.QtWidgets import QApplication
 
     
-    with open("BlackList.tsv", "r+") as blacklist, open("DoubleCheckList.tsv", "r+") as checklist, open("CuratedList.tsv", "r+") as curatelist:
-        blacklist.seek(0, os.SEEK_END)
-        checklist.seek(0, os.SEEK_END)
-        curatelist.seek(0, os.SEEK_END)
-        app = QApplication(sys.argv)
-        imageViewer = QImageViewer(blacklist, checklist, curatelist)
-        imageViewer.show()
-        sys.exit(app.exec_())
+    app = QApplication(sys.argv)
+    imageViewer = QImageViewer()
+    imageViewer.show()
+    sys.exit(app.exec_())
     # TODO QScrollArea support mouse
     # base on https://github.com/baoboa/pyqt5/blob/master/examples/widgets/imageviewer.py
     #
