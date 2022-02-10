@@ -273,6 +273,10 @@ class QImageViewer(QMainWindow):
             print(os.path.join(self.folder, self.files[0]))
             self.openImage(os.path.join(self.folder, self.files[0]))
             self.setWindowTitle(f"IGV Image Viewer - {self.folder}")
+            folder_name = self.folder.split("/")[-1]
+            self.results_folder = "results_"+folder_name
+            with open(os.path.join(self.results_folder, "BlackList.tsv"), "a+") as blacklist, open(os.path.join(self.results_folder,"DoubleCheckList.tsv"), "a+") as checklist, open(os.path.join(self.results_folder,"CuratedList.tsv"), "a+") as curatelist: 
+                pass
             
     def select_tsv(self):
         global betastasis_df
@@ -383,8 +387,7 @@ class QImageViewer(QMainWindow):
 if __name__ == '__main__':
     import sys
     from PyQt5.QtWidgets import QApplication
-    with open("BlackList.tsv", "a+") as blacklist, open("DoubleCheckList.tsv", "a+") as checklist, open("CuratedList.tsv", "a+") as curatelist: 
-        pass
+
     
     with open("BlackList.tsv", "r+") as blacklist, open("DoubleCheckList.tsv", "r+") as checklist, open("CuratedList.tsv", "r+") as curatelist:
         blacklist.seek(0, os.SEEK_END)
