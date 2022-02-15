@@ -8,6 +8,7 @@ authors = ["tu1026 <s31302@gmail.com>"]
 python = "==3.8.5"
 PyQt5 = "^5.15.6"
 pandas = "^1.4.0"
+ipykernel = "^6.9.1"
 
 [tool.poetry.dev-dependencies]
 pyinstaller = "^4.9"
