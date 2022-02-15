@@ -23,8 +23,8 @@ A results folder will be created in the same directory that the app is in.
 
 Inside the folder you will have three files. 
 
-Blacklist file is the standard format that betastasis uses so you can upload this to tambio and let the machine do the blacklisting. 
+- Blacklist file is the standard format that betastasis uses so you can upload this to tambio and let the machine do the blacklisting. 
 
-CuratedFile has all the records of all the screeshot so you can see if something has bee curated, blacklisted or doubted. 
+- CuratedFile has all the records of all the screeshot so you can see if something has bee curated, blacklisted or doubted. 
 
-Finally, you have the checklist, which contains all the screenshots that you doubted so you will need to review these.
+- Finally, you have the checklist, which contains all the screenshots that you doubted so you will need to review these.
