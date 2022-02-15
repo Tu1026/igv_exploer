@@ -10,6 +10,8 @@ from PyQt5.QtWidgets import QLabel, QSizePolicy, QScrollArea, QMessageBox, QMain
 import os 
 from pathlib import Path
 import platform
+from PyQt5 import QtGui
+import sys
 
 if platform.system():
     try:
@@ -81,10 +83,10 @@ class WriteToFileThread(QThread):
         row = betastasis_df[(betastasis_df["CHROM"] == "chr" + str(self.chrom)) & (
             (betastasis_df["POSITION"])==int(self.pos))&
             (betastasis_df["GENE"]==self.gene)]
-        print(f"This is row {row}")
-        print(f"This is chr chr{str(self.chrom)}")
-        print(f"Position: {self.pos}")
-        print(f"This is Gene {self.gene}")
+        # print(f"This is row {row}")
+        # print(f"This is chr chr{str(self.chrom)}")
+        # print(f"Position: {self.pos}")
+        # print(f"This is Gene {self.gene}")
         if not len(row):
             self.errorMessage.emit("Could not find related entry for the screenshot in the betastasis TSV",
                                 "You might want to double check the betastasis TSV you downloaded, maybe you forgot to show silent and blacklisted genes? "
@@ -105,9 +107,51 @@ class WriteToFileThread(QThread):
                 file.write(f"{self.dataName} needs double checking \n")
                 file.flush()
         with open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a") as file:
-            file.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\t{self.gene}\t{self.action}\n")
+            file.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\t{self.gene}\t{self.action}\t{self.dataName}\n")
             file.flush()
         mutex.unlock()
+
+
+class ReloadProgressThread(QThread):
+    fileName = pyqtSignal(str)
+    errorMessage = pyqtSignal(str, str)
+    # def __init__(self, parent=None):
+    #     QThread.__init__(self, parent)
+    
+    def peek_line(self, file):
+        file.seek(0, os.SEEK_END)
+
+        # This code means the following code skips the very last character in the file -
+        # i.e. in the case the last line is null we delete the last line
+        # and the penultimate one
+        pos = file.tell() - 1
+
+        # Read each character in the file one at a time from the penultimate
+        # character going backwards, searching for a newline character
+        # If we find a new line, exit the search
+        while pos > 0 and file.read(1) != "\n":
+            pos -= 1
+            file.seek(pos, os.SEEK_SET)
+
+        # So long as we're not at the start of the file, delete all the characters ahead
+        # of this position
+        # if pos > 0:
+        #     file.seek(pos, os.SEEK_SET)
+        line = file.readline()
+        file.seek(pos)
+        return line
+
+    def run(self):
+        mutex.lock()
+        if os.getsize(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name)):
+            with open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "r+") as curateFile:
+                last_line = self.peek_line(curateFile)
+                self.fileName.emit(last_line.split("\t")[-1])
+                
+        else:
+            self.errorMessage.emit("The progress reload folder you selected doesn't seem to be correct", "The curated file has nothing in it causing the program to fail. Are you sure you have already curated stuff for this project?")
+        mutex.unlock()
+
 
 class DeleteLineThread(QThread):
     
@@ -284,15 +328,24 @@ class QImageViewer(QMainWindow):
             self.keyPressed.connect(self.on_key)
             self.files = [img for img in os.listdir(self.folder) if img.endswith((".png", ".jpeg", "jpg"))]
             print(os.path.join(self.folder, self.files[0]))
-            self.openImage(os.path.join(self.folder, self.files[0]))
             self.setWindowTitle(f"IGV Image Viewer - {self.folder}")
             folderName = os.path.basename(self.folder)
             resultsFolder = os.path.join(bundle_dir, "results_"+folderName)
             Path(resultsFolder).mkdir(parents=True, exist_ok=True)
             contextPerserver.resultDir = resultsFolder
             print(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name))
-            with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "a+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "a+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a+") as curatelist: 
-                pass
+            qm = QMessageBox()
+            qm.setIcon(QMessageBox.information)
+            ret = qm.question(self,'', "Do you want to load progress from previously creted folder?", qm.Yes | qm.No)
+            if ret == qm.Yes:
+                work_dir = QFileDialog.getExistingDirectory(self, 'Select folder where previous results are located', options=QFileDialog.ShowDirsOnly)
+                if work_dir:
+                    #@TODO connect the threads
+                    contextPerserver.resultDir = work_dir
+            else:
+                self.openImage(os.path.join(self.folder, self.files[0]))
+                with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "a+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "a+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a+") as curatelist: 
+                    pass
             
             
     def select_tsv(self):
