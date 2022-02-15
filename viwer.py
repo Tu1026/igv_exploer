@@ -20,6 +20,10 @@ if platform.system():
         pass
 working_dir = Path(__file__).parent
 
+
+bundle_dir = os.path.dirname(sys.argv[0])
+
+
 mutex = QtCore.QMutex()
 # class ProcessThread(threading.Thread):
 #     def __init__(self, in_queue, out_queue):
@@ -101,8 +105,8 @@ class WriteToFileThread(QThread):
                 file.write(f"{self.dataName} needs double checking \n")
                 file.flush()
         with open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a") as file:
-            self.curateFile.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\t{self.gene}\t{self.action}\n")
-            self.curateFile.flush()
+            file.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\t{self.gene}\t{self.action}\n")
+            file.flush()
         mutex.unlock()
 
 class DeleteLineThread(QThread):
@@ -232,7 +236,6 @@ class QImageViewer(QMainWindow):
             self.counter += 1
             if key == QtCore.Qt.Key_Q:
                 action = "Blacklisted"
-                file = self.blacklist
                 print('Pressed Q')
                 # self.openImage(os.path.join(self.folder, self.files[self.counter]))
             elif key == QtCore.Qt.Key_E:
@@ -278,18 +281,19 @@ class QImageViewer(QMainWindow):
     def select_folder(self):
         self.folder = QFileDialog.getExistingDirectory(self, 'Select folder of screenshots', options=QFileDialog.ShowDirsOnly)
         if self.folder:
-            global working_dir
             self.keyPressed.connect(self.on_key)
             self.files = [img for img in os.listdir(self.folder) if img.endswith((".png", ".jpeg", "jpg"))]
             print(os.path.join(self.folder, self.files[0]))
             self.openImage(os.path.join(self.folder, self.files[0]))
             self.setWindowTitle(f"IGV Image Viewer - {self.folder}")
-            folder_name = os.path.basename(self.folder)
-            results_folder = os.path.join(working_dir, "results_"+folder_name)
-            Path(results_folder).mkdir(parents=True, exist_ok=True)
-            contextPerserver.results_folder = results_folder
-            with open(os.path.join(results_folder, contextPerserver.black_list_name), "a+") as blacklist, open(os.path.join(results_folder, contextPerserver.checklist_name), "a+") as checklist, open(os.path.join(results_folder, contextPerserver.curatelist_name), "a+") as curatelist: 
+            folderName = os.path.basename(self.folder)
+            resultsFolder = os.path.join(bundle_dir, "results_"+folderName)
+            Path(resultsFolder).mkdir(parents=True, exist_ok=True)
+            contextPerserver.resultDir = resultsFolder
+            print(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name))
+            with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "a+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "a+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a+") as curatelist: 
                 pass
+            
             
     def select_tsv(self):
         options = QFileDialog.Options()
@@ -401,7 +405,6 @@ class contextPerserver():
     black_list_name = "BlackList.tsv"
     checklist_name = "DoubleCheckList.tsv"
     curatelist_name = "CuratedList.tsv"
-    results_folder = None
 
 if __name__ == '__main__':
     import sys
