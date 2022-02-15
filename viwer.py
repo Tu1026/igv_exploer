@@ -166,7 +166,8 @@ class DeleteLineThread(QThread):
         # This code means the following code skips the very last character in the file -
         # i.e. in the case the last line is null we delete the last line
         # and the penultimate one
-        pos = file.tell() - 1
+        pos = file.tell() - 3
+        file.seek(pos)
 
         # Read each character in the file one at a time from the penultimate
         # character going backwards, searching for a newline character
@@ -179,8 +180,8 @@ class DeleteLineThread(QThread):
         # of this position
         if pos > 0:
             file.seek(pos, os.SEEK_SET)
-            file.truncate()
-        file.write("\n")
+        file.truncate()
+        # file.write("\n")
     
     def peek_line(self, file):
         file.seek(0, os.SEEK_END)
@@ -188,8 +189,8 @@ class DeleteLineThread(QThread):
         # This code means the following code skips the very last character in the file -
         # i.e. in the case the last line is null we delete the last line
         # and the penultimate one
-        pos = file.tell() - 1
-
+        pos = file.tell() - 3
+        file.seek(pos)
         # Read each character in the file one at a time from the penultimate
         # character going backwards, searching for a newline character
         # If we find a new line, exit the search
@@ -198,12 +199,13 @@ class DeleteLineThread(QThread):
             file.seek(pos, os.SEEK_SET)
 
         # So long as we're not at the start of the file, delete all the characters ahead
-        # of this position
+        # # of this position
         # if pos > 0:
         #     file.seek(pos, os.SEEK_SET)
         line = file.readline()
         file.seek(pos)
         return line
+
         
     def run(self):
         mutex.lock()
@@ -211,7 +213,7 @@ class DeleteLineThread(QThread):
             curateFile.seek(0, os.SEEK_END)
             curate_line = self.peek_line(curateFile)
             print("This is curate_line", curate_line)
-            action = curate_line.split("\t")[-1]
+            action = curate_line.split("\t")[-2]
             print("This is action", action)
             if "Blacklisted" in action:
                 with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "r+") as blackList:
@@ -221,9 +223,9 @@ class DeleteLineThread(QThread):
                     print("Delete from blacklist")
                     blackList.flush()
             elif "Needs Double Check" in action:
-                with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "r+") as checkList:
+                with open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "r+") as checkList:
                     checkList.seek(0, os.SEEK_END)
-                    print(action, "should be needs double chec ")
+                    print(action, "should be needs double check ")
                     self.delete_last_line(checkList)
                     checkList.flush()
             self.delete_last_line(curateFile)
@@ -321,9 +323,14 @@ class QImageViewer(QMainWindow):
         imgTd.igvScreenShot.connect(self.loadImage)
         imgTd.start()
 
-                
+    def reloadProcess(self, fileName):
+        ind = self.files.index(fileName)
+        if not ind >= len(self.files):
+            self.counter = ind
+        self.openImage(fileName)
+           
     def select_folder(self):
-        self.folder = QFileDialog.getExistingDirectory(self, 'Select folder of screenshots', options=QFileDialog.ShowDirsOnly)
+        self.folder = QFileDialog.getExistingDirectory(self, 'Select folder of screenshots')
         if self.folder:
             self.keyPressed.connect(self.on_key)
             self.files = [img for img in os.listdir(self.folder) if img.endswith((".png", ".jpeg", "jpg"))]
@@ -335,13 +342,17 @@ class QImageViewer(QMainWindow):
             contextPerserver.resultDir = resultsFolder
             print(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name))
             qm = QMessageBox()
-            qm.setIcon(QMessageBox.information)
+            qm.setIcon(QMessageBox.Information)
             ret = qm.question(self,'', "Do you want to load progress from previously creted folder?", qm.Yes | qm.No)
             if ret == qm.Yes:
-                work_dir = QFileDialog.getExistingDirectory(self, 'Select folder where previous results are located', options=QFileDialog.ShowDirsOnly)
+                work_dir = QFileDialog.getExistingDirectory(self, 'Select folder where previous results are located')
                 if work_dir:
                     #@TODO connect the threads
                     contextPerserver.resultDir = work_dir
+                    reloadThread = ReloadProgressThread()
+                    reloadThread.fileName.connect(self.reloadProcess)
+                    reloadThread.errorMessage.connect(self.pop_up_alert)
+                    reloadThread.start()
             else:
                 self.openImage(os.path.join(self.folder, self.files[0]))
                 with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "a+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "a+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a+") as curatelist: 
