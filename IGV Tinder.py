@@ -27,32 +27,7 @@ bundle_dir = os.path.dirname(sys.argv[0])
 
 
 mutex = QtCore.QMutex()
-# class ProcessThread(threading.Thread):
-#     def __init__(self, in_queue, out_queue):
-#         threading.Thread.__init__(self)
-#         self.in_queue = in_queue
-#         self.out_queue = out_queue
 
-#     def run(self):
-#         while True:
-#             path = self.in_queue.get()
-#             result = self.process(path)
-#             self.out_queue.put(result)
-#             self.in_queue.task_done()
-
-#     def process(self, path):
-#         pass
-    
-# class PrintThread(threading.Thread):
-#     def __init__(self, queue):
-#         threading.Thread.__init__(self)
-#         self.queue = queue
-
-#     def run(self):
-#         while True:
-#             result = self.queue.get()
-#             self.printfiles(result)
-#             self.queue.task_done()
 
 class ImageThread(QThread):
     igvScreenShot = pyqtSignal(QPixmap)
