@@ -76,7 +76,7 @@ class WriteToFileThread(QThread):
         self.action = action
         self.dataName = dataName
         self.chrom, self.pos, self.gene, self.patient, _ = self.dataName.split(".")
-        self.gene = self.gene if self.gene != "nan" else np.nan
+        self.gene = self.gene
 
     
     def run(self):
@@ -84,11 +84,11 @@ class WriteToFileThread(QThread):
         betastasis_df = contextPerserver.betastasis_df
         row = betastasis_df[(betastasis_df["CHROM"] == "chr" + str(self.chrom)) & (
             (betastasis_df["POSITION"])==int(self.pos))&
-            (pd.isna(betastasis_df["GENE"]))]
-        print(f"This is row {row}")
-        print(f"This is chr chr{str(self.chrom)}")
-        print(f"Position: {self.pos}")
-        print(f"This is Gene {self.gene}")
+            ((betastasis_df["GENE"]==self.gene) | ((pd.isna(betastasis_df["GENE"])&(self.gene == "nan"))))]
+        # print(f"This is row {row}")
+        # print(f"This is chr chr{str(self.chrom)}")
+        # print(f"Position: {self.pos}")
+        # print(f"This is Gene {self.gene}")
         if not len(row):
             self.errorMessage.emit("Could not find related entry for the screenshot in the betastasis TSV",
                                 "You might want to double check the betastasis TSV you downloaded, maybe you forgot to show silent and blacklisted genes? "
@@ -377,6 +377,7 @@ class QImageViewer(QMainWindow):
         print(self.tsv_path)
         if self.tsv_path[0]:
             contextPerserver.betastasis_df = pd.read_csv(self.tsv_path[0], sep="\t", index_col=False)
+            contextPerserver.betastasis_df["GENE"] = contextPerserver.betastasis_df["GENE"]
 
     def zoomIn(self):
         self.scaleImage(1.25)
