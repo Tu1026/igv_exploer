@@ -12,6 +12,7 @@ from pathlib import Path
 import platform
 from PyQt5 import QtGui
 import sys
+import numpy as np
 
 if platform.system():
     try:
@@ -75,6 +76,7 @@ class WriteToFileThread(QThread):
         self.action = action
         self.dataName = dataName
         self.chrom, self.pos, self.gene, self.patient, _ = self.dataName.split(".")
+        self.gene = self.gene if self.gene != "nan" else np.nan
 
     
     def run(self):
@@ -82,16 +84,17 @@ class WriteToFileThread(QThread):
         betastasis_df = contextPerserver.betastasis_df
         row = betastasis_df[(betastasis_df["CHROM"] == "chr" + str(self.chrom)) & (
             (betastasis_df["POSITION"])==int(self.pos))&
-            (betastasis_df["GENE"]==self.gene)]
-        # print(f"This is row {row}")
-        # print(f"This is chr chr{str(self.chrom)}")
-        # print(f"Position: {self.pos}")
-        # print(f"This is Gene {self.gene}")
+            (pd.isna(betastasis_df["GENE"]))]
+        print(f"This is row {row}")
+        print(f"This is chr chr{str(self.chrom)}")
+        print(f"Position: {self.pos}")
+        print(f"This is Gene {self.gene}")
         if not len(row):
             self.errorMessage.emit("Could not find related entry for the screenshot in the betastasis TSV",
                                 "You might want to double check the betastasis TSV you downloaded, maybe you forgot to show silent and blacklisted genes? "
                                 "This gene will be skipped for record keeping now")
         try:
+            # print("This is row", row)
             ref = row["REF"].iloc[0]
             alt = row["ALT"].iloc[0]
         except:
@@ -148,7 +151,7 @@ class ReloadProgressThread(QThread):
             with open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "r+") as curateFile:
                 last_line = self.peek_line(curateFile)
                 print(f"this is the last line: {last_line}")
-                self.fileName.emit(last_line.split("\t")[-1])
+                self.fileName.emit(last_line.split("\t")[-1].strip())
                 
         else:
             self.errorMessage.emit("The progress reload folder you selected doesn't seem to be correct", "The curated file has nothing in it causing the program to fail. Are you sure you have already curated stuff for this project?")
@@ -270,7 +273,7 @@ class QImageViewer(QMainWindow):
         betastasis_df = contextPerserver.betastasis_df
         if betastasis_df is None:
             self.pop_up_alert("You need to select the exported full TSV before you can start", 
-                              "Download the TSV from betastasis (include the silent and blacklisted) and select the tsv from file option").exec_()
+                              "Download the TSV from betastasis (include the silent and blacklisted) and select the tsv from file option")
             return
         # test for a specific key
         if key == QtCore.Qt.Key_B:
@@ -305,7 +308,7 @@ class QImageViewer(QMainWindow):
         msg.setText(shortText)
         msg.setInformativeText(longText)
         msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        return msg
+        msg.exec_()
     
 
             
@@ -327,7 +330,10 @@ class QImageViewer(QMainWindow):
         self.imgTd.start()
 
     def reloadProcess(self, fileName):
-        ind = self.files.index(fileName)
+        try:
+            ind = self.files.index(fileName)
+        except ValueError:
+            self.pop_up_alert("Cannot reload progress", f"{fileName} not found in the screeshots folder are you sure you are reloading from the correct folder")
         if not ind >= len(self.files):
             self.counter = ind
         print(f"open image {fileName}")
