@@ -1,5 +1,5 @@
 ### Windows compiled exe download here:
-https://github.com/Tu1026/igv_exploer/blob/pyqt/dist/IGV%20Tinder.exe
+https://github.com/Tu1026/igv_exploer/blob/pyqt/dist/IGV%20Tindel.exe
 
 
 ### Usage
