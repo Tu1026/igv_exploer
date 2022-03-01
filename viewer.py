@@ -103,7 +103,11 @@ class WriteToFileThread(QThread):
                                 "This gene will be skipped for record keeping now")
         if self.action == "Blacklisted":
             with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "a") as file:
-                file.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\n")
+                file.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\t\n")
+                file.flush()
+        elif self.action == "Whitelisted":
+            with open(os.path.join(contextPerserver.resultDir, contextPerserver.white_list_name), "a") as file:
+                file.write(f"chr{self.chrom}\t{self.pos}\t{ref}\t{alt}\t\n")
                 file.flush()
         elif self.action == "Needs Double Check":
             with open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "a") as file:
@@ -233,6 +237,12 @@ class DeleteLineThread(QThread):
                     print(action, "should be needs double check ")
                     self.delete_last_line(checkList)
                     checkList.flush()
+            elif "Whitelisted" in action:
+                with open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "r+") as whiteList:
+                    whiteList.seek(0, os.SEEK_END)
+                    print(action, "should be needs whiteList ")
+                    self.delete_last_line(whiteList)
+                    whiteList.flush()
             self.delete_last_line(curateFile)
             curateFile.flush()
         mutex.unlock()
@@ -255,7 +265,7 @@ class QImageViewer(QMainWindow):
         self.scrollArea.setWidget(self.imageLabel)
         self.scrollArea.setVisible(False)
         
-        
+        self.threadError = None
         self.setCentralWidget(self.scrollArea)
         self.createActions()
         self.createMenus()
@@ -290,7 +300,7 @@ class QImageViewer(QMainWindow):
                 print('Pressed Q')
                 # self.openImage(os.path.join(self.folder, self.files[self.counter]))
             elif key == QtCore.Qt.Key_E:
-                action = "Curated"
+                action = "Whitelisted"
                 print("Pressed E")
                 # self.openImage(os.path.join(self.folder, self.files[self.counter]))
             elif key == QtCore.Qt.Key_W:
@@ -302,13 +312,17 @@ class QImageViewer(QMainWindow):
             self.writeImageThread.start()
         self.openImage(os.path.join(self.folder, self.files[self.counter]))
     
-    def pop_up_alert(self, shortText, longText):
+    def pop_up_alert(self, shortText, longText, thread=False):
+
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Critical)
         msg.setText(shortText)
         msg.setInformativeText(longText)
         msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        msg.exec_()
+        if thread:
+            self.threadError = msg
+        else:
+            msg.exec_()
     
 
             
@@ -366,7 +380,7 @@ class QImageViewer(QMainWindow):
                     self.reloadThread.start()
             else:
                 self.openImage(os.path.join(self.folder, self.files[0]))
-                with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "a+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "a+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a+") as curatelist: 
+                with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "a+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "a+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a+") as curatelist, open(os.path.join(contextPerserver.resultDir, contextPerserver.white_list_name), "a+"):
                     pass
             
             
@@ -481,6 +495,7 @@ class contextPerserver():
     black_list_name = "BlackList.tsv"
     checklist_name = "DoubleCheckList.tsv"
     curatelist_name = "CuratedList.tsv"
+    white_list_name = "WhiteList.tsv"
 
 if __name__ == '__main__':
     import sys
