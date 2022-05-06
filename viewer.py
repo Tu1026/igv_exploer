@@ -238,7 +238,7 @@ class DeleteLineThread(QThread):
                     self.delete_last_line(checkList)
                     checkList.flush()
             elif "Whitelisted" in action:
-                with open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "r+") as whiteList:
+                with open(os.path.join(contextPerserver.resultDir, contextPerserver.white_list_name), "r+") as whiteList:
                     whiteList.seek(0, os.SEEK_END)
                     print(action, "should be needs whiteList ")
                     self.delete_last_line(whiteList)
@@ -380,7 +380,7 @@ class QImageViewer(QMainWindow):
                     self.reloadThread.start()
             else:
                 self.openImage(os.path.join(self.folder, self.files[0]))
-                with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "a+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "a+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "a+") as curatelist, open(os.path.join(contextPerserver.resultDir, contextPerserver.white_list_name), "a+"):
+                with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "w+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "w+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "w+") as curatelist, open(os.path.join(contextPerserver.resultDir, contextPerserver.white_list_name), "w+"):
                     pass
             
             
