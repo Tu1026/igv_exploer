@@ -175,7 +175,10 @@ class DeleteLineThread(QThread):
         # i.e. in the case the last line is null we delete the last line
         # and the penultimate one
         pos = file.tell() - 3
-        file.seek(pos)
+        try:
+            file.seek(pos)
+        except:
+            pos = 0
         # Read each character in the file one at a time from the penultimate
         # character going backwards, searching for a newline character
         # If we find a new line, exit the search
@@ -299,7 +302,6 @@ class QImageViewer(QMainWindow):
             self.deleteLineThread = DeleteLineThread()
             self.deleteLineThread.start()
         elif key == QtCore.Qt.Key_Q or key == QtCore.Qt.Key_E or key == QtCore.Qt.Key_W:
-            self.counter += 1
             if key == QtCore.Qt.Key_Q:
                 action = "Blacklisted"
                 print('Pressed Q')
@@ -311,12 +313,15 @@ class QImageViewer(QMainWindow):
             elif key == QtCore.Qt.Key_W:
                 print("Pressed W")
                 action = "Needs Double Check"
-            if self.counter == len(self.files):
-                return
-            else:
-                self.writeImageThread = WriteToFileThread(action,self.files[self.counter])
-                self.writeImageThread.errorMessage.connect(self.pop_up_alert)
-                self.writeImageThread.start()
+                
+            self.writeImageThread = WriteToFileThread(action,self.files[self.counter])
+            self.writeImageThread.errorMessage.connect(self.pop_up_alert)
+            self.writeImageThread.start()
+            if self.counter+1 == len(self.files):
+                self.pop_up_alert("You are done!", "All screenshots have been gone through you can safely exist the program")
+            else :
+                self.counter += 1
+                
         self.openImage(os.path.join(self.folder, self.files[self.counter]))
     
     def pop_up_alert(self, shortText, longText, thread=False):
