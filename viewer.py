@@ -306,7 +306,8 @@ class QImageViewer(QMainWindow):
             elif key == QtCore.Qt.Key_W:
                 print("Pressed W")
                 action = "Needs Double Check"
-            
+            if self.counter == len(self.files):
+                return
             self.writeImageThread = WriteToFileThread(action,self.files[self.counter])
             self.writeImageThread.errorMessage.connect(self.pop_up_alert)
             self.writeImageThread.start()
@@ -369,20 +370,42 @@ class QImageViewer(QMainWindow):
             qm = QMessageBox()
             qm.setIcon(QMessageBox.Information)
             ret = qm.question(self,'', "Do you want to load progress from previously creted folder?", qm.Yes | qm.No)
+            
             if ret == qm.Yes:
-                work_dir = QFileDialog.getExistingDirectory(self, 'Select folder where previous results are located')
-                if work_dir:
-                    #@TODO connect the threads
-                    contextPerserver.resultDir = work_dir
-                    self.reloadThread = ReloadProgressThread()
-                    self.reloadThread.fileName.connect(self.reloadProcess)
-                    self.reloadThread.errorMessage.connect(self.pop_up_alert)
-                    self.reloadThread.start()
+                qm_load = QMessageBox()
+                qm_load.setIcon(QMessageBox.Information)
+                ret_load = qm_load.question(self,'', "Do you want to load only the ones need double checking?", qm_load.Yes | qm_load.No)
+                if ret_load == qm_load.Yes:
+                    work_dir = QFileDialog.getExistingDirectory(self, 'Select folder where previous results are located')
+                    if work_dir:
+                        #@TODO connect the threads
+                        contextPerserver.resultDir = work_dir
+                    file_name_doubt = Path(Path(contextPerserver.resultDir).joinpath(contextPerserver.checklist_name))
+                    if not file_name_doubt.exists():
+                            self.pop_up_alert("File not exist", "The doubted file does not exit, check if this is the right folder or if you really have curated the results") 
+                    with open(file_name_doubt, "r") as f:
+                        files = f.read().splitlines()
+                    if not len(files):
+                        self.pop_up_alert("Nothing in doubt file", "There is nothing in the doubted files")
+                    files = [file_name.replace("needs double checking", "").rstrip() for file_name in files]
+                    print(files)
+                    self.files = files
+                    print("opening", os.path.join(self.folder, self.files[0]))
+                    self.openImage(os.path.join(self.folder, self.files[0]))
+                else:
+                    work_dir = QFileDialog.getExistingDirectory(self, 'Select folder where previous results are located')
+                    if work_dir:
+                        #@TODO connect the threads
+                        contextPerserver.resultDir = work_dir
+                        self.reloadThread = ReloadProgressThread()
+                        self.reloadThread.fileName.connect(self.reloadProcess)
+                        self.reloadThread.errorMessage.connect(self.pop_up_alert)
+                        self.reloadThread.start()
             else:
                 self.openImage(os.path.join(self.folder, self.files[0]))
                 with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "w+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "w+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "w+") as curatelist, open(os.path.join(contextPerserver.resultDir, contextPerserver.white_list_name), "w+"):
                     pass
-            
+
             
     def select_tsv(self):
         options = QFileDialog.Options()
