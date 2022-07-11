@@ -68,6 +68,18 @@ class ImageThread(QThread):
         self.igvScreenShot.emit(pixmapImage)
 
 
+class DoubtFileCleanThread(QThread):
+    def __init__(self,  parent=None):
+        QThread.__init__(self, parent)
+        
+    def run(self):
+        mutex.lock()
+        lines = open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "r").readlines()[1:]
+        with open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "w") as file:
+            file.writelines(lines)
+        mutex.unlock()
+        
+    
 class WriteToFileThread(QThread):
     errorMessage = pyqtSignal(str, str)
     
@@ -321,7 +333,9 @@ class QImageViewer(QMainWindow):
                 self.pop_up_alert("You are done!", "All screenshots have been gone through you can safely exist the program")
             else :
                 self.counter += 1
-                
+            if contextPerserver.doublt_only:
+                self.doubtCleanThread = DoubtFileCleanThread()
+                self.doubtCleanThread.start()
         self.openImage(os.path.join(self.folder, self.files[self.counter]))
     
     def pop_up_alert(self, shortText, longText, thread=False):
@@ -358,7 +372,7 @@ class QImageViewer(QMainWindow):
     def reloadProcess(self, fileName):
         try:
             ind = self.files.index(fileName)
-        except ValueError:
+        except Exception:
             self.pop_up_alert("Cannot reload progress", f"{fileName} not found in the screeshots folder are you sure you are reloading from the correct folder")
         if not ind >= len(self.files):
             self.counter = ind
@@ -374,26 +388,23 @@ class QImageViewer(QMainWindow):
             print(os.path.join(self.folder, self.files[0]))
             self.setWindowTitle(f"IGV Image Viewer - {self.folder}")
             folderName = os.path.basename(self.folder)
-            resultsFolder = os.path.join(bundle_dir, "results_"+folderName)
-            Path(resultsFolder).mkdir(parents=True, exist_ok=True)
-            contextPerserver.resultDir = resultsFolder
-            print(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name))
+            # resultsFolder = os.path.join(bundle_dir, "results_"+folderName)
             qm = QMessageBox()
             qm.setIcon(QMessageBox.Information)
             ret = qm.question(self,'', "Do you want to load progress from previously creted folder?", qm.Yes | qm.No)
-            
             if ret == qm.Yes:
                 qm_load = QMessageBox()
                 qm_load.setIcon(QMessageBox.Information)
                 ret_load = qm_load.question(self,'', "Do you want to load only the ones need double checking?", qm_load.Yes | qm_load.No)
                 if ret_load == qm_load.Yes:
+                    contextPerserver.doublt_only=True
                     work_dir = QFileDialog.getExistingDirectory(self, 'Select folder where previous results are located')
                     if work_dir:
                         #@TODO connect the threads
                         contextPerserver.resultDir = work_dir
                     file_name_doubt = Path(Path(contextPerserver.resultDir).joinpath(contextPerserver.checklist_name))
                     if not file_name_doubt.exists():
-                            self.pop_up_alert("File not exist", "The doubted file does not exit, check if this is the right folder or if you really have curated the results") 
+                        self.pop_up_alert("File not exist", "The doubted file does not exit, check if this is the right folder or if you really have curated the results") 
                     with open(file_name_doubt, "r") as f:
                         files = f.read().splitlines()
                     if not len(files):
@@ -413,9 +424,18 @@ class QImageViewer(QMainWindow):
                         self.reloadThread.errorMessage.connect(self.pop_up_alert)
                         self.reloadThread.start()
             else:
-                self.openImage(os.path.join(self.folder, self.files[0]))
-                with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "w+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "w+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "w+") as curatelist, open(os.path.join(contextPerserver.resultDir, contextPerserver.white_list_name), "w+"):
-                    pass
+                resultsFolder = QFileDialog.getExistingDirectory(self, 'Select folder to store the results file')
+                if resultsFolder:
+                    contextPerserver.resultDir = Path(resultsFolder).joinpath('results_'+ folderName)
+                    contextPerserver.resultDir.mkdir(parents=True, exist_ok=True)
+                    print(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name))
+                    print(f"Create files at {resultsFolder} and {os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name)}")
+                    self.openImage(os.path.join(self.folder, self.files[0]))
+                    with open(os.path.join(contextPerserver.resultDir, contextPerserver.black_list_name), "w+") as blacklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "w+") as checklist, open(os.path.join(contextPerserver.resultDir, contextPerserver.curatelist_name), "w+") as curatelist, open(os.path.join(contextPerserver.resultDir, contextPerserver.white_list_name), "w+"):
+                        pass
+                
+
+                
 
             
     def select_tsv(self):
@@ -530,7 +550,7 @@ class contextPerserver():
     checklist_name = "DoubleCheckList.tsv"
     curatelist_name = "CuratedList.tsv"
     white_list_name = "WhiteList.tsv"
-
+    doublt_only = False
 if __name__ == '__main__':
     import sys
     from PyQt5.QtWidgets import QApplication
