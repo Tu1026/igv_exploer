@@ -4,7 +4,7 @@ https://github.com/Tu1026/igv_exploer/blob/pyqt/dist/IGV%20Tindel.exe
 
 ### Build Code
 
-pyinstaller --name "IGV Tindel" -F --icon=APP.ico --add-data="APP.ico;." --noconsole viewer.py
+pyinstaller --name "IGV Tindel" -F --icon=APP.ico --add-data="APP.ico;." --add-data="APPICON.png:." --noconsole viewer.py
 
 ### Usage (Please read **VERY CARFULLY** )
 
