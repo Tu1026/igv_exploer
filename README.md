@@ -6,7 +6,13 @@ https://github.com/Tu1026/igv_exploer/blob/pyqt/dist/IGV%20Tindel.exe
 
 pyinstaller --name "IGV Tindel" -F --icon=APP.ico --add-data="APP.ico;." --noconsole viewer.py
 
-### Usage
+### Usage (Please read **VERY CARFULLY** )
+
+Please note that the screeshots must be named with this convention **chorm.position.gene.sample.mutantReads.png**
+
+The betastasis file must have the mutant reads contain in the format of (123) or 0:123:0::0
+
+A current known bug is you cannot undo curation on the first image. I will find some time to implement the fix
 
 #### Setup:
 
