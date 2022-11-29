@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import pandas as pd
-from PyQt5.QtCore import QThread, Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QThread, Qt, pyqtSignal, pyqtSlot, QDir
 from PyQt5 import QtCore
 from PyQt5.QtGui import QImage, QPixmap, QPalette, QPainter
 from PyQt5.QtPrintSupport import QPrintDialog, QPrinter
@@ -14,14 +14,13 @@ from PyQt5 import QtGui
 import sys
 import numpy as np
 
-if platform.system():
+if platform.system() == "Winodws":
     try:
         from ctypes import windll  # Only exists on Windows.
         myappid = 'mycompany.myproduct.subproduct.version'
         windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except ImportError:
         pass
-working_dir = Path(__file__).parent
 
 
 bundle_dir = os.path.dirname(sys.argv[0])
@@ -84,6 +83,7 @@ class WriteToFileThread(QThread):
         betastasis_df = contextPerserver.betastasis_df
         row = betastasis_df[(betastasis_df["CHROM"] == "chr" + str(self.chrom)) & (
             (betastasis_df["POSITION"])==int(self.pos))&
+            (betastasis_df[self.patient].str.conatins("*")) &
             ((betastasis_df["GENE"]==self.gene) | ((pd.isna(betastasis_df["GENE"])&(self.gene == "nan"))))]
         # print(f"This is row {row}")
         # print(f"This is chr chr{str(self.chrom)}")
@@ -238,7 +238,7 @@ class DeleteLineThread(QThread):
                     self.delete_last_line(checkList)
                     checkList.flush()
             elif "Whitelisted" in action:
-                with open(os.path.join(contextPerserver.resultDir, contextPerserver.checklist_name), "r+") as whiteList:
+                with open(os.path.join(contextPerserver.resultDir, contextPerserver.white_list_name), "r+") as whiteList:
                     whiteList.seek(0, os.SEEK_END)
                     print(action, "should be needs whiteList ")
                     self.delete_last_line(whiteList)
@@ -252,6 +252,11 @@ class QImageViewer(QMainWindow):
     fileAction = pyqtSignal(str)
     def __init__(self):
         super().__init__()
+        global bundle_dir
+        bundle_dir = QDir.currentPath()
+        print("This is bulder_der", bundle_dir)
+        
+        
         self.counter = 0
         self.scaleFactor = 0.0
         
