@@ -13,6 +13,7 @@ import platform
 from PyQt5 import QtGui
 import sys
 import numpy as np
+import re
 
 if platform.system() == "Winodws":
     try:
@@ -24,6 +25,16 @@ if platform.system() == "Winodws":
 
 
 bundle_dir = os.path.dirname(sys.argv[0])
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 
 mutex = QtCore.QMutex()
@@ -86,16 +97,22 @@ class WriteToFileThread(QThread):
         QThread.__init__(self, parent)
         self.action = action
         self.dataName = dataName
-        self.chrom, self.pos, self.gene, self.patient, _ = self.dataName.split(".")
+        self.chrom, self.pos, self.gene, self.patient, self.mutantReadsStr, _ = self.dataName.split(".")
         self.gene = self.gene
-
+    
+    def match_mutant_reads(self, series, numberStr):
+        # extract_string = fr"\({numberStr}\)"
+        # extract_string = fr":{numberStr}:"
+        extract_string = numberStr
+        return series.apply(lambda string: bool(re.findall(extract_string, string) ))
     
     def run(self):
         mutex.lock()
         betastasis_df = contextPerserver.betastasis_df
         row = betastasis_df[(betastasis_df["CHROM"] == "chr" + str(self.chrom)) & (
             (betastasis_df["POSITION"])==int(self.pos))&
-            (betastasis_df[self.patient].str.conatins("*")) &
+            (betastasis_df[self.patient].str.contains("\*")) &
+            (self.match_mutant_reads(betastasis_df[self.patient], self.mutantReadsStr)) &
             ((betastasis_df["GENE"]==self.gene) | ((pd.isna(betastasis_df["GENE"])&(self.gene == "nan"))))]
         # print(f"This is row {row}")
         # print(f"This is chr chr{str(self.chrom)}")
@@ -279,6 +296,7 @@ class QImageViewer(QMainWindow):
         
         self.counter = 0
         self.scaleFactor = 0.0
+        self.preIndexProtector = 0
         
         self.imageLabel = QLabel()
         self.imageLabel.setBackgroundRole(QPalette.Base)
@@ -305,6 +323,7 @@ class QImageViewer(QMainWindow):
         self.keyPressed.emit(event.key()) 
         
     def on_key(self, key):
+        print(f'pre index protector: {self.preIndexProtector}')
         betastasis_df = contextPerserver.betastasis_df
         if betastasis_df is None:
             self.pop_up_alert("You need to select the exported full TSV before you can start", 
@@ -312,12 +331,20 @@ class QImageViewer(QMainWindow):
             return
         # test for a specific key
         if key == QtCore.Qt.Key_B:
+            
+            ###!! Implement better index protection in the beginning
+            # if self.counter == 0 and self.preIndexProtector == 0:
+            #     return
             if self.counter == 0:
+                # self.deleteLineThread = DeleteLineThread()
+                # self.deleteLineThread.start()
+                # self.preIndexProtector -= 1
                 return
-            self.counter -= 1
             # self.openImage(os.path.join(self.folder, self.files[self.counter]))
-            self.deleteLineThread = DeleteLineThread()
-            self.deleteLineThread.start()
+            if self.counter+1 < len(self.files):
+                self.deleteLineThread = DeleteLineThread()
+                self.deleteLineThread.start()
+            self.counter -= 1
         elif key == QtCore.Qt.Key_Q or key == QtCore.Qt.Key_E or key == QtCore.Qt.Key_W:
             if key == QtCore.Qt.Key_Q:
                 action = "Blacklisted"
@@ -331,17 +358,21 @@ class QImageViewer(QMainWindow):
                 print("Pressed W")
                 action = "Needs Double Check"
                 
-            self.writeImageThread = WriteToFileThread(action,self.files[self.counter])
-            self.writeImageThread.errorMessage.connect(self.pop_up_alert)
-            self.writeImageThread.start()
             if self.counter+1 == len(self.files):
                 self.pop_up_alert("You are done!", "All screenshots have been gone through you can safely exist the program")
             else :
+                self.writeImageThread = WriteToFileThread(action,self.files[self.counter])
+                self.writeImageThread.errorMessage.connect(self.pop_up_alert)
+                self.writeImageThread.start()
                 self.counter += 1
             if contextPerserver.doublt_only:
                 self.doubtCleanThread = DoubtFileCleanThread()
                 self.doubtCleanThread.start()
-        self.openImage(os.path.join(self.folder, self.files[self.counter]))
+        self.preIndexProtector = 1 
+        if self.counter+1 == len(self.files):
+            self.openImage(resource_path(self.files[self.counter]))
+        else:
+            self.openImage(os.path.join(self.folder, self.files[self.counter]))
     
     def pop_up_alert(self, shortText, longText, thread=False):
 
@@ -389,7 +420,8 @@ class QImageViewer(QMainWindow):
         self.folder = QFileDialog.getExistingDirectory(self, 'Select folder of screenshots')
         if self.folder:
             self.keyPressed.connect(self.on_key)
-            self.files = [img for img in os.listdir(self.folder) if img.endswith((".png", ".jpeg", "jpg"))]
+            self.files = [img for img in os.listdir(self.folder) if img.endswith((".png", ".jpeg", "jpg"))] + ['APPICON.png']
+            # print(self.files)
             print(os.path.join(self.folder, self.files[0]))
             self.setWindowTitle(f"IGV Image Viewer - {self.folder}")
             folderName = os.path.basename(self.folder)
